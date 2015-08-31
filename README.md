@@ -8,7 +8,9 @@ You will need to:
 1. Fork this repository.
 
 2. Setup and deploy the application somewhere and you have only these instructions:
+
    2.1 This project works on Ubuntu Linux 14.04 x64
+   
    2.2 This is a django project and you can install the packages via requirements (`pip install -r requirements.txt`)
    For any other issues or question you will have to ask to the developers.
    In this case please ask to us without problems :)
