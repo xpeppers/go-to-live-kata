@@ -7,6 +7,7 @@ You will need to:
 1. Fork this repository.
 
 2. Setup and deploy the application somewhere and you have only these instructions:
+
    2.1 It works on Ubuntu Linux 14.04 x64
 
    2.2 It's based on the last version of wordpress (it will be more useful if we can parameterize the version)
