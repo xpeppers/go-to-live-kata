@@ -8,10 +8,12 @@ You will need to:
 
 2. Setup and deploy the application somewhere and you have only these instructions:
    2.1 It works on Ubuntu Linux 14.04 x64
+
    2.2 It's based on the last version of wordpress (it will be more useful if we can parameterize the version)
+
    2.3 You can choose Apache, Nginx or whatever you want
-   For any other issues or question you will have to ask to the developers.
-   In this case please ask to us without problems :)
+
+   For any other issues or question you will have to ask to the developers. In this case please ask to us without problems :)
 
 3. When you finished it should be possible to deploy everywhere with some acceptable changes.
 
