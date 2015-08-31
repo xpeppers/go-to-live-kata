@@ -1,0 +1,5 @@
+helloworld.sqlite
+*.pyc
+
+.idea
+.DS_Store
