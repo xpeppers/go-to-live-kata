@@ -6,7 +6,9 @@ You will need to:
 
 1. Fork this repository.
 
-2. Setup and deploy the application somewhere and you have only these instructions:
+2. Automate the creation of infrastructure and setup of the application.
+
+   You have only these instructions:
 
    2.1 It works on Ubuntu Linux 14.04 x64
 
@@ -16,14 +18,10 @@ You will need to:
 
    For any other issues or question you will have to ask to the developers. In this case please ask to us without problems :)
 
-3. When you finished it should be possible to deploy everywhere with some acceptable changes.
+3. The application when deployed should be secure, fast and stable. Assume that the machine is running on the public Internet and should be hardened and locked down.
 
-4. The application when deployed should be secure, fast and stable. Assume that the machine is running on the public Internet and should be hardened and locked down.
+4. Make any assumptions that you need to. This is an opportunity to showcase your skills, so if you want to, implement the deployment process with any additional features, tools or techniques you'd like to.
 
-5. Create a method for deploying the application that can be triggered manually using a method of your choice.
+5. We are evaluating solutions based on the architecture and quality of the deployment. Show us just how beautiful, clean and pragmatic your code can be.
 
-6. Make any assumptions that you need to. This is an opportunity to showcase your skills, so if you want to, implement the deployment process with any additional features, tools or techniques you'd like to.
-
-7. We are evaluating solutions based on the architecture and quality of the deployment. Show us just how beautiful, clean and pragmatic your code can be.
-
-8. Once your solution is ready, please send us the link of your project.
+6. Once your solution is ready, please send us the link of your project.
