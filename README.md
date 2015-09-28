@@ -1,7 +1,7 @@
 Go to live! kata
 ==================================
 
-Contained in this repo, there is some instructions for a new application that it will go live in the next month.
+Contained in this repo, there are some instructions for a new application that will go live in the next month!
 You will need to:
 
 1. Fork this repository.
