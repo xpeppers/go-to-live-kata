@@ -1,0 +1,23 @@
+---
+- name: Scarico WordPress
+  get_url: url=https://it.wordpress.org/wordpress-4.7.2-it_IT.tar.gz dest=/tmp/wordpress.tar.gz validate_certs=no
+  sudo: yes
+- name: Estrazione e spostamento
+  unarchive: src=/tmp/wordpress.tar.gz dest=/var/www/ copy=no
+  sudo: yes
+- name: Update Apache
+  sudo: yes
+  lineinfile: dest=/etc/apache2/sites-enabled/000-default.conf regexp="(.)+DocumentRoot /var/www/html" line="DocumentRoot /var/www/wordpress"
+  notify: restart Apache
+  sudo: yes
+- name: Copio il config file
+  command: mv /var/www/wordpress/wp-config-sample.php /var/www/wordpress/wp-config.php creates=/var/www/wordpress/wp-config.php
+  sudo: yes
+- name: Modifica del config file
+  lineinfile: dest=/var/www/wordpress/wp-config.php regexp="{{ item.regexp }}" line="{{ item.line }}"
+  with_items:
+    - {'regexp': "define\\('DB_NAME', '(.)+'\\);", 'line': "define('DB_NAME', '{{wp_mysql_db}}');"}        
+    - {'regexp': "define\\('DB_USER', '(.)+'\\);", 'line': "define('DB_USER', '{{wp_mysql_user}}');"}        
+    - {'regexp': "define\\('DB_PASSWORD', '(.)+'\\);", 'line': "define('DB_PASSWORD', '{{wp_mysql_password}}');"}
+  sudo: yes
+

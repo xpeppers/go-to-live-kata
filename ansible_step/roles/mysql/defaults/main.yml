@@ -1,0 +1,4 @@
+---
+wp_mysql_db: wordpress
+wp_mysql_user: xpep
+wp_mysql_password: xpepperWP
