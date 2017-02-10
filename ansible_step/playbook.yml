@@ -1,0 +1,4 @@
+- hosts: lampstack
+  roles:
+    - wp
+    - mysql
