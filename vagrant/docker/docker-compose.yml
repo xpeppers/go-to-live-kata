@@ -1,0 +1,57 @@
+version: '3'
+
+volumes:
+   db_data:
+   wp_home:
+
+services:
+   db:
+     image: mysql:5.7
+     volumes:
+       - db_data:/var/lib/mysql
+       - /tmp
+     restart: always
+     environment:
+       MYSQL_ROOT_PASSWORD: somewordpress
+       MYSQL_DATABASE: wordpress
+       MYSQL_USER: wordpress
+       MYSQL_PASSWORD: wordpress
+
+   wordpress:
+     depends_on:
+       - db
+     image: wordpress:latest
+     ports:
+       - "8000:80"
+     restart: always
+     volumes:
+       - wp_home:/var/www/html
+     environment:
+       WORDPRESS_DB_HOST: db:3306
+       WORDPRESS_DB_USER: wordpress
+       WORDPRESS_DB_PASSWORD: wordpress
+#     logging:
+#       driver: syslog
+#       options:
+#         syslog-address: "tcp://192.168.0.100:123"
+
+   wordpress-cli:
+    depends_on:
+       - wordpress    
+    image: pattonwebz/docker-wpcli
+    volumes:
+       - wp_home:/var/www/html
+       - ./wp_export:/tmp
+    links:
+       - db:db
+    entrypoint: wp
+    command: "export --dir=/tmp --user=xpeppersAdmin --post_type=post --start_date=2017-01-01 --end_date=2017-12-31"
+
+#https://medium.com/@tatemz/using-wp-cli-with-docker-21b0ab9fab79
+#https://developer.wordpress.org/cli/commands/import/
+#https://developer.wordpress.org/cli/commands/
+
+
+#how to run
+#docker-compose up -d
+
