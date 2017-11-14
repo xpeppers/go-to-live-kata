@@ -1,4 +1,17 @@
-Go to live! kata
+How to:
+==================================
+
+The project at this stage is not ready for production deploy.
+Is still missing an apache frontend and network separation between database and wordpress.
+To fit requirements, an ubuntu box on vagrant is built provisioned with docker, but vagrant has still port forwarding issues.
+
+So, to test the docker part just consider the docker folder and run docker-compose up -d.
+
+
+
+
+
+Requirements: Go to live! kata
 ==================================
 
 Contained in this repo, there are some instructions for a new application that will go live in the next month!
