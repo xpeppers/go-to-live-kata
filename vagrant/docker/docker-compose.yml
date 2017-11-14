@@ -22,7 +22,7 @@ services:
        - db
      image: wordpress:latest
      ports:
-       - "8000:80"
+       - "80:80"
      restart: always
      volumes:
        - wp_home:/var/www/html
@@ -30,10 +30,7 @@ services:
        WORDPRESS_DB_HOST: db:3306
        WORDPRESS_DB_USER: wordpress
        WORDPRESS_DB_PASSWORD: wordpress
-#     logging:
-#       driver: syslog
-#       options:
-#         syslog-address: "tcp://192.168.0.100:123"
+
 
    wordpress-cli:
     depends_on:
@@ -41,17 +38,9 @@ services:
     image: pattonwebz/docker-wpcli
     volumes:
        - wp_home:/var/www/html
-       - ./wp_export:/tmp
     links:
        - db:db
     entrypoint: wp
-    command: "export --dir=/tmp --user=xpeppersAdmin --post_type=post --start_date=2017-01-01 --end_date=2017-12-31"
+    command: "core install --url=127.0.0.1 --title=xpeppers-kata --admin_user=xpeppersAdmin --admin_email=wpAdmin@xpeppers.com --admin_password=!123Qwe"
 
-#https://medium.com/@tatemz/using-wp-cli-with-docker-21b0ab9fab79
-#https://developer.wordpress.org/cli/commands/import/
-#https://developer.wordpress.org/cli/commands/
-
-
-#how to run
-#docker-compose up -d
 
