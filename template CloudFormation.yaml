@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: High Availability Architecture "go-to-live-kata"  
+
+#1. Creazione di una VPC - 2.Creazione di un gruppo di Autoscaling di istanze EC2 - 3. Creazione di un ALB
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      Tags:
+        - Key: Name
+          Value: "VPC"
+
+  PubSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.0.0/24"
+
+      AvailabilityZone: "eu-west-1a"
+      Tags:
+        - Key: Name
+          Value: "PubSubnet1"
+
+  PubSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.1.0/24"
+      AvailabilityZone: "eu-west-1b"
+      Tags:
+        - Key: Name
+          Value: "PubSubnet2"
+
+  PrvSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.2.0/24"
+      AvailabilityZone: "eu-west-1a"
+      Tags:
+        - Key: Name
+          Value: "PrvSubnet1"
+
+  PrvSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.3.0/24"
+      AvailabilityZone: "eu-west-1b"
+      Tags:
+        - Key: Name
+          Value: "PrvSubnet2"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: "PublicRouteTable"
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: "PrivateRouteTable"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+  
+  # associate the route table with the subnet
+
+  PubSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PubSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrvSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrvSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrvSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrvSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  SGALB:   #SecurityGroup Application Load Balancer
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "SGALB"
+      GroupDescription: "Security group for Application Load Balancer"
+      VpcId: !Ref VPC
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "LoadBalancer"
+      Subnets:
+        - !Ref PubSubnet1
+        - !Ref PubSubnet2
+      SecurityGroups:
+        - !Ref SGALB
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: "TargetGroup"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: "instance"
+      VpcId: !Ref VPC
+
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-01dd271720c1ba44f # AMI ubuntu 22.04 
+      InstanceType: t2.micro
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update
+          apt-get install -y apache2
+          systemctl start apache2
+          
+
+
+        
+
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: "AutoScalingGroup"
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: 2
+      MaxSize: 4
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PrvSubnet1
+        - !Ref PrvSubnet2
+      TargetGroupARNs:
+        - !Ref TargetGroup
+
+Outputs:
+  LoadBalancerEndpoint:
+    Value: !GetAtt LoadBalancer.DNSName
+    Description: "LoadBalancer DNSName"
