@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: High Availability Architecture "go-to-live-kata"  
 
-#1. Creazione di una VPC - 2.Creazione di un gruppo di Autoscaling di istanze EC2 - 3. Creazione di un ALB
-
 Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: "10.0.0.0/16"
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
       Tags:
         - Key: Name
           Value: "VPC"
@@ -22,6 +22,7 @@ Resources:
       Tags:
         - Key: Name
           Value: "PubSubnet1"
+      MapPublicIpOnLaunch: true
 
   PubSubnet2:
     Type: AWS::EC2::Subnet
@@ -32,6 +33,7 @@ Resources:
       Tags:
         - Key: Name
           Value: "PubSubnet2"
+      MapPublicIpOnLaunch: true
 
   PrvSubnet1:
     Type: AWS::EC2::Subnet
@@ -61,7 +63,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
-
+  
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -85,6 +87,7 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: "0.0.0.0/0"
       GatewayId: !Ref InternetGateway
+
   
   # associate the route table with the subnet
 
@@ -112,12 +115,26 @@ Resources:
       SubnetId: !Ref PrvSubnet2
       RouteTableId: !Ref PrivateRouteTable
 
-  SGALB:   #SecurityGroup Application Load Balancer
+  SGALB:   # SecurityGroup Application Load Balancer
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: "SGALB"
       GroupDescription: "Security group for Application Load Balancer"
       VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
 
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -146,9 +163,26 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          apt-get update
-          apt-get install -y apache2
-          systemctl start apache2
+          apt-get update -y
+          apt-get install -y apache2 mysql-client php php-mysql
+
+          # Install WordPress
+          cd /var/www/html
+          wget https://wordpress.org/latest.tar.gz
+          tar -xzvf latest.tar.gz
+          cp -r wordpress/* .
+          rm -rf wordpress latest.tar.gz
+          chown -R www-data:www-data /var/www/html
+          chmod -R 755 /var/www/html
+
+          # Configure WordPress
+          cp wp-config-sample.php wp-config.php
+          sed -i 's/matt/your_db_name/g' wp-config.php
+          sed -i 's/matt/your_db_user/g' wp-config.php
+          sed -i 's/m12345678/your_db_password/g' wp-config.php
+
+          # Restart Apache
+          systemctl restart apache2
           
 
 
@@ -168,6 +202,43 @@ Resources:
         - !Ref PrvSubnet2
       TargetGroupARNs:
         - !Ref TargetGroup
+  
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 5 # GB (MIN 5)
+      DBInstanceClass: db.t2.micro
+      Engine: mysql
+      EngineVersion: "5.7"
+      MasterUsername: matt
+      MasterUserPassword: m12345678
+      DBName: matt
+      MultiAZ: true
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: RDSSecurityGroup
+      GroupDescription: Security group for RDS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref SGALB
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS
+      SubnetIds:
+        - !Ref PrvSubnet1
+        - !Ref PrvSubnet2
 
 Outputs:
   LoadBalancerEndpoint:
