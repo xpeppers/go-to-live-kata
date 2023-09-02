@@ -1,11 +1,73 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: High Availability Architecture "go-to-live-kata"
 
+Parameters:
+#CIDR
+##VPC
+  VPCCIDR:
+    Description: CIDR for the VPC
+    Type: String
+    Default: 10.0.0.0/16
+##PrvSubnet1
+  PrvSubnet1CIDR:
+    Description: CIDR for the PrvSubnet1
+    Type: String
+    Default: 10.0.3.0/24
+##PrvSubnet2
+  PrvSubnet2CIDR:
+    Description: CIDR for the PrvSubnet2
+    Type: String
+    Default: 10.0.4.0/24
+##PubSubnet1
+  PubSubnet1CIDR:
+    Description: CIDR for the PubSubnet1
+    Type: String
+    Default: 10.0.1.0/24
+##PubSubnet2
+  PubSubnet2CIDR:
+    Description: CIDR for the PubSubnet2
+    Type: String
+    Default: 10.0.2.0/24
+#Wordpress version
+  WPV:
+    Description: Wordpress version
+    Type: String
+    Default: latest
+    AllowedValues: [5.4,5.4.7,5.5,5.5.6,5.6,5.6.4,5.7,5.7.3,5.8,5.8.1,6.1,6.1.1,6.1.2,6.1.3,6.2,6.2.1,6.2.2,latest]
+
+##DB
+#MultiAZ
+  DBMAZ:
+    Description: Boolean parameter to enable Multi-AZ for the database
+    Type: String
+    #Di default lo disabilito perchè ha un costo maggiore
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+#Storage DB
+StorageDB:
+    Type: Number
+    #di default setto 5GB (il minimo)
+    Default: 5
+    Description: DB Storage (GB)
+#CloudFront
+##Price Class  
+## N.B ogni classe ha un costo diverso:
+### "PriceClass_All" (La classe di prezzo più costosa che include tutte le edge location di CloudFront in tutto il mondo).
+### "PriceClass_100" (Include le edge location più comuni e offre buone prestazioni globali a un costo inferiore rispetto a PriceClass_All).
+### "PriceClass_200" (Include un sottoinsieme di edge location rispetto a PriceClass_100, ottimo per distribuzioni regionali o limitate).
+  PriceClassCloudFront:
+    Description: CloudFront Price Class
+    Type: String
+    Default: 'PriceClass_200'
+    AllowedValues: ['PriceClass_All','PriceClass_100','PriceClass_200']
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: "10.0.0.0/16"
+      CidrBlock: !Ref VPCCIDR
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
@@ -16,7 +78,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.1.0/24
+      CidrBlock: !Ref PubSubnet1CIDR
       MapPublicIpOnLaunch: true
       AvailabilityZone: !Select
         - 0
@@ -29,7 +91,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
+      CidrBlock: !Ref PubSubnet2CIDR
       MapPublicIpOnLaunch: true
       AvailabilityZone: !Select
         - 1
@@ -42,7 +104,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.3.0/24
+      CidrBlock: !Ref PrvSubnet1CIDR
       AvailabilityZone: !Select
         - 0
         - Fn::GetAZs: !Ref 'AWS::Region'
@@ -54,7 +116,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.4.0/24
+      CidrBlock: !Ref PrvSubnet2CIDR
       AvailabilityZone: !Select
         - 1
         - Fn::GetAZs: !Ref 'AWS::Region'
@@ -178,15 +240,15 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 80
+          FromPort: 80 #HTTP
           ToPort: 80
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
-          FromPort: 22
+          FromPort: 22 #SSH
           ToPort: 22
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
-          FromPort: 443
+          FromPort: 443 #HTTPS
           ToPort: 443
           CidrIp: 0.0.0.0/0
 
@@ -199,6 +261,20 @@ Resources:
         - !Ref PubSubnet2
       SecurityGroups:
         - !Ref SGEC2
+
+  ListenerLB:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: "200"
+            ContentType: text/plain
+            MessageBody: "RICHIESTA SU PORTA 80"
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -216,17 +292,18 @@ Resources:
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
 
+
   RDSInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-      AllocatedStorage: 5  # GB (MIN 5)
+      AllocatedStorage: !Ref StorageDB
       DBInstanceClass: db.t2.micro
       Engine: mysql
       EngineVersion: "5.7"
       MasterUsername: wordpress
       MasterUserPassword: matteomatteo
       DBName: wordpress
-      MultiAZ: false
+      MultiAZ: !Ref MultiAZ
       StorageType: gp2
       VPCSecurityGroups:
         - !Ref RDSSecurityGroup
@@ -263,6 +340,9 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
 
+          #Versione Wordpress
+          WORDPRESS_VERSION=!Ref WPV
+
           # Aggiorna i repository e il sistema
           apt update -y
 
@@ -298,8 +378,9 @@ Resources:
           chown www-data: /srv/www
 
           # Scarica e estrai l'ultima versione di WordPress nella directory del sito web
-          curl https://wordpress.org/latest.tar.gz | sudo -u www-data tar zx -C /srv/www
-
+          curl -O https://wordpress.org/wordpress-$WORDPRESS_VERSION.tar.gz
+          tar -zxvf wordpress-$WORDPRESS_VERSION.tar.gz -C /srv/www
+          
           # Crea un file di configurazione Apache per il sito WordPress
           cat << EOF > /etc/apache2/sites-available/wordpress.conf
           <VirtualHost *:80>
@@ -355,7 +436,43 @@ Resources:
       TargetGroupARNs:
         - !Ref TargetGroup
 
-Outputs:
-  LoadBalancerEndpoint:
-    Value: !GetAtt LoadBalancer.DNSName
-    Description: "LoadBalancer DNSName"
+
+
+
+  CloudFrontDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          AllowedMethods:
+          - DELETE
+          - GET
+          - HEAD
+          - OPTIONS
+          - PATCH
+          - POST
+          - PUT
+          DefaultTTL: 0
+          MaxTTL: 0
+          MinTTL: 0
+          ForwardedValues:
+            QueryString: true
+            Headers:
+            - '*'
+            Cookies:
+              Forward: all
+          TargetOriginId: LB
+          ViewerProtocolPolicy: 'redirect-to-https'
+          Compress: true
+        Enabled: true
+        IPV6Enabled: true
+        Origins:
+        - DomainName: !GetAtt 'LoadBalancer.DNSName'
+          Id: LB
+          CustomOriginConfig:
+            HTTPSPort: 443
+            OriginProtocolPolicy: 'https-only'
+            OriginReadTimeout: 60
+        PriceClass: !Ref PriceClassCloudFront
+        HttpVersion: http2and3
+
