@@ -40,7 +40,7 @@ Parameters:
   DBMAZ:
     Description: Boolean parameter to enable Multi-AZ for the database
     Type: String
-    #Di default lo disabilito perchè ha un costo maggiore
+    #Di default lo disabilito perchè ha un costo maggiore ( se si necessita un' affidabilità maggiore selezionare true)
     Default: "false"
     AllowedValues:
       - "true"
