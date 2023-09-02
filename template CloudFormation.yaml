@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: High Availability Architecture "go-to-live-kata"  
+Description: High Availability Architecture "go-to-live-kata"
 
 Resources:
   VPC:
@@ -16,31 +16,36 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: "10.0.0.0/24"
-
-      AvailabilityZone: "eu-west-1a"
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
       Tags:
         - Key: Name
           Value: "PubSubnet1"
-      MapPublicIpOnLaunch: true
 
   PubSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: "10.0.1.0/24"
-      AvailabilityZone: "eu-west-1b"
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
       Tags:
         - Key: Name
           Value: "PubSubnet2"
-      MapPublicIpOnLaunch: true
 
   PrvSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: "10.0.2.0/24"
-      AvailabilityZone: "eu-west-1a"
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
       Tags:
         - Key: Name
           Value: "PrvSubnet1"
@@ -49,12 +54,15 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: "10.0.3.0/24"
-      AvailabilityZone: "eu-west-1b"
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
       Tags:
         - Key: Name
           Value: "PrvSubnet2"
 
+  # Internet Gateway
   InternetGateway:
     Type: AWS::EC2::InternetGateway
 
@@ -63,7 +71,31 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
-  
+
+  # NAT
+
+  EIPNAT1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  EIPNAT2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NAT1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPNAT1.AllocationId
+      SubnetId: !Ref PubSubnet1
+
+  NAT2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPNAT2.AllocationId
+      SubnetId: !Ref PubSubnet2
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -72,13 +104,21 @@ Resources:
         - Key: Name
           Value: "PublicRouteTable"
 
-  PrivateRouteTable:
+  PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: "PrivateRouteTable"
+          Value: "PrivateRouteTable1"
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: "PrivateRouteTable2"
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -88,7 +128,22 @@ Resources:
       DestinationCidrBlock: "0.0.0.0/0"
       GatewayId: !Ref InternetGateway
 
-  
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NAT1
+
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NAT2
+
   # associate the route table with the subnet
 
   PubSubnet1RouteTableAssociation:
@@ -107,19 +162,19 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrvSubnet1
-      RouteTableId: !Ref PrivateRouteTable
+      RouteTableId: !Ref PrivateRouteTable1
 
   PrvSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrvSubnet2
-      RouteTableId: !Ref PrivateRouteTable
+      RouteTableId: !Ref PrivateRouteTable2
 
-  SGALB:   # SecurityGroup Application Load Balancer
+  SGEC2:  # SecurityGroup
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "SGALB"
-      GroupDescription: "Security group for Application Load Balancer"
+      GroupName: "SGEC2"
+      GroupDescription: "Security group for EC2"
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -135,7 +190,6 @@ Resources:
           ToPort: 443
           CidrIp: 0.0.0.0/0
 
-
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -144,7 +198,7 @@ Resources:
         - !Ref PubSubnet1
         - !Ref PubSubnet2
       SecurityGroups:
-        - !Ref SGALB
+        - !Ref SGEC2
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -154,67 +208,25 @@ Resources:
       Protocol: "HTTP"
       TargetType: "instance"
       VpcId: !Ref VPC
-
-  LaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    Properties:
-      ImageId: ami-01dd271720c1ba44f # AMI ubuntu 22.04 
-      InstanceType: t2.micro
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          apt-get update -y
-          apt-get install -y apache2 mysql-client php php-mysql
-
-          # Install WordPress
-          cd /var/www/html
-          wget https://wordpress.org/latest.tar.gz
-          tar -xzvf latest.tar.gz
-          cp -r wordpress/* .
-          rm -rf wordpress latest.tar.gz
-          chown -R www-data:www-data /var/www/html
-          chmod -R 755 /var/www/html
-
-          # Configure WordPress
-          cp wp-config-sample.php wp-config.php
-          sed -i 's/matt/your_db_name/g' wp-config.php
-          sed -i 's/matt/your_db_user/g' wp-config.php
-          sed -i 's/m12345678/your_db_password/g' wp-config.php
-
-          # Restart Apache
-          systemctl restart apache2
-          
-
-
-        
-
-
-  AutoScalingGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Properties:
-      AutoScalingGroupName: "AutoScalingGroup"
-      LaunchConfigurationName: !Ref LaunchConfig
-      MinSize: 2
-      MaxSize: 4
-      DesiredCapacity: 2
-      VPCZoneIdentifier:
-        - !Ref PrvSubnet1
-        - !Ref PrvSubnet2
-      TargetGroupARNs:
-        - !Ref TargetGroup
-  
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: '80'
+      HealthCheckPath: /index.php
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
 
   RDSInstance:
     Type: AWS::RDS::DBInstance
     Properties:
-      AllocatedStorage: 5 # GB (MIN 5)
+      AllocatedStorage: 5  # GB (MIN 5)
       DBInstanceClass: db.t2.micro
       Engine: mysql
       EngineVersion: "5.7"
-      MasterUsername: matt
-      MasterUserPassword: m12345678
-      DBName: matt
-      MultiAZ: true
+      MasterUsername: wordpress
+      MasterUserPassword: matteomatteo
+      DBName: wordpress
+      MultiAZ: false
       StorageType: gp2
       VPCSecurityGroups:
         - !Ref RDSSecurityGroup
@@ -230,7 +242,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          SourceSecurityGroupId: !Ref SGALB
+          SourceSecurityGroupId: !Ref SGEC2
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -239,6 +251,109 @@ Resources:
       SubnetIds:
         - !Ref PrvSubnet1
         - !Ref PrvSubnet2
+
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-01dd271720c1ba44f  # AMI ubuntu 22.04
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref SGEC2
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+
+          # Aggiorna i repository e il sistema
+          apt update -y
+
+          # Installa il pacchetto needrestart
+          sudo apt install needrestart
+
+          # Modifica il file di configurazione di needrestart per eseguire il riavvio automatico del kernel (-1 per 'a')
+          sed -i "s/#\$nrconf{kernelhints} = -1;/\$nrconf{kernelhints} = -1;/g" /etc/needrestart/needrestart.conf
+
+          # Configura needrestart per eseguire il riavvio automatico dei servizi invece che chiedere all'utente ('i' per 'a')
+          sed -i "/#\$nrconf{restart} = 'i';/s/.*/\$nrconf{restart} = 'a';/" /etc/needrestart/needrestart.conf
+
+          # Installa i pacchetti necessari per Apache, PHP, MySQL e altri componenti
+          apt install -y apache2 \
+                        ghostscript \
+                        libapache2-mod-php \
+                        mysql-server \
+                        php \
+                        php-bcmath \
+                        php-curl \
+                        php-imagick \
+                        php-intl \
+                        php-json \
+                        php-mbstring \
+                        php-mysql \
+                        php-xml \
+                        php-zip
+
+          # Crea una directory per il sito web
+          mkdir -p /srv/www
+
+          # Imposta i permessi sulla directory del sito web per l'utente Apache, www-data
+          chown www-data: /srv/www
+
+          # Scarica e estrai l'ultima versione di WordPress nella directory del sito web
+          curl https://wordpress.org/latest.tar.gz | sudo -u www-data tar zx -C /srv/www
+
+          # Crea un file di configurazione Apache per il sito WordPress
+          cat << EOF > /etc/apache2/sites-available/wordpress.conf
+          <VirtualHost *:80>
+             DocumentRoot /srv/www/wordpress
+             <Directory /srv/www/wordpress>
+                  Options FollowSymLinks
+                  AllowOverride Limit Options FileInfo
+                 DirectoryIndex index.php
+                  Require all granted
+             </Directory>
+             <Directory /srv/www/wordpress/wp-content>
+                  Options FollowSymLinks
+                  Require all granted
+             </Directory>
+          </VirtualHost>
+          EOF
+
+          # Abilita il sito WordPress
+          a2ensite wordpress
+
+          # Abilita il modulo di rewrite di Apache
+          a2enmod rewrite
+
+          # Disabilita il sito predefinito di Apache (000-default)
+          a2dissite 000-default
+
+          # Ricarica il servizio Apache per applicare le modifiche di configurazione
+          sudo service apache2 reload
+
+          # Avvia il servizio MySQL
+          service mysql start
+
+          # Copia il file di configurazione di WordPress
+          sudo -u www-data cp /srv/www/wordpress/wp-config-sample.php /srv/www/wordpress/wp-config.php
+
+          # Configura il file di configurazione di WordPress con le informazioni del database
+          sudo -u www-data sed -i 's/database_name_here/wordpress/' /srv/www/wordpress/wp-config.php
+          sudo -u www-data sed -i 's/username_here/wordpress/' /srv/www/wordpress/wp-config.php
+          sudo -u www-data sed -i 's/password_here/matteomatteo/' /srv/www/wordpress/wp-config.php
+          sudo -u www-data sed -i 's/put your unique phrase here/ciao/' /srv/www/wordpress/wp-config.php
+         
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: "AutoScalingGroup"
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: 2
+      MaxSize: 4
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PrvSubnet1
+        - !Ref PrvSubnet2
+      TargetGroupARNs:
+        - !Ref TargetGroup
 
 Outputs:
   LoadBalancerEndpoint:
