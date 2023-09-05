@@ -33,7 +33,7 @@ Parameters:
     Description: Wordpress version
     Type: String
     Default: latest
-    AllowedValues: [5.4,5.4.7,5.5,5.5.6,5.6,5.6.4,5.7,5.7.3,5.8,5.8.1,6.1,6.1.1,6.1.2,6.1.3,6.2,6.2.1,6.2.2,latest]
+    AllowedValues: [5.4,5.5,5.6,5.7,5.8,6.1,6.2,latest]
 
 #DB
 ##MultiAZ
@@ -67,7 +67,7 @@ Parameters:
     Default: password123
     Description: Password for wordpress (default --> password123) , the default password is not recommended
     NoEcho: true
-##RDS ENDPOINT 
+
 
 #CloudFront
 ##Price Class  
@@ -159,22 +159,11 @@ Resources:
     Properties:
       Domain: vpc
 
-  EIPNAT2:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-
   NAT1:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt EIPNAT1.AllocationId
       SubnetId: !Ref PubSubnet1
-
-  NAT2:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt EIPNAT2.AllocationId
-      SubnetId: !Ref PubSubnet2
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -214,15 +203,7 @@ Resources:
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
       DestinationCidrBlock: "0.0.0.0/0"
-      NatGatewayId: !Ref NAT1
-
-  PrivateRoute2:
-    Type: AWS::EC2::Route
-    DependsOn: VPCGatewayAttachment
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable2
-      DestinationCidrBlock: "0.0.0.0/0"
-      NatGatewayId: !Ref NAT2
+      NatGatewayId: !Ref NAT1      
 
   # associate the route table with the subnet
 
