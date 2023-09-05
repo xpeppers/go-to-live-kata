@@ -2,7 +2,7 @@
 
 Questo template **AWS CloudFormation** permette di creare un'architettura ad alta disponibilità per il progetto "go-to-live-kata". L'architettura comprende una **VPC** con subnet pubbliche e private, un **bilanciamento del carico**, un **database RDS** e una **distribuzione CloudFront**.
 ## Architettura proposta
-
+![Architettura](assets/Architettura.jpg)
 ## Come Creare lo Stack
 ### Dalla Console AWS
 
