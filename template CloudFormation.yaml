@@ -35,22 +35,40 @@ Parameters:
     Default: latest
     AllowedValues: [5.4,5.4.7,5.5,5.5.6,5.6,5.6.4,5.7,5.7.3,5.8,5.8.1,6.1,6.1.1,6.1.2,6.1.3,6.2,6.2.1,6.2.2,latest]
 
-##DB
-#MultiAZ
+#DB
+##MultiAZ
   DBMAZ:
     Description: Boolean parameter to enable Multi-AZ for the database
     Type: String
-    #Di default lo disabilito perchè ha un costo maggiore ( se si necessita un' affidabilità maggiore selezionare true)
+    #Di default lo disabilito perchè ha un costo maggiore
     Default: "false"
     AllowedValues:
       - "true"
       - "false"
-#Storage DB
-StorageDB:
+##Storage DB
+  StorageDB:
     Type: Number
     #di default setto 5GB (il minimo)
     Default: 5
     Description: DB Storage (GB)
+##DB NAME
+  DBNAME:
+    Type: String
+    Default: wordpress
+    Description: wordpress (default --> wordpress)
+##USERNAME
+  USERNAME:
+    Type: String
+    Default: wordpress
+    Description: Username for wordpress (default --> wordpress)
+##PASSWORD
+  PASSWORD:
+    Type: String
+    Default: password123
+    Description: Password for wordpress (default --> password123) , the default password is not recommended
+    NoEcho: true
+##RDS ENDPOINT 
+
 #CloudFront
 ##Price Class  
 ## N.B ogni classe ha un costo diverso:
@@ -275,40 +293,16 @@ Resources:
       Port: 80
       Protocol: HTTP
 
-
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: "TargetGroup"
       Port: 80
       Protocol: "HTTP"
-      TargetType: "instance"
+      TargetType: instance
       VpcId: !Ref VPC
-      HealthCheckIntervalSeconds: 30
-      HealthCheckProtocol: HTTP
-      HealthCheckPort: '80'
-      HealthCheckPath: /index.php
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 2
-
-
-  RDSInstance:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      AllocatedStorage: !Ref StorageDB
-      DBInstanceClass: db.t2.micro
-      Engine: mysql
-      EngineVersion: "5.7"
-      MasterUsername: wordpress
-      MasterUserPassword: matteomatteo
-      DBName: wordpress
-      MultiAZ: !Ref MultiAZ
-      StorageType: gp2
-      VPCSecurityGroups:
-        - !Ref RDSSecurityGroup
-      DBSubnetGroupName: !Ref DBSubnetGroup
-
+  
+  #RDS    
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -329,99 +323,22 @@ Resources:
         - !Ref PrvSubnet1
         - !Ref PrvSubnet2
 
-  LaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
     Properties:
-      ImageId: ami-01dd271720c1ba44f  # AMI ubuntu 22.04
-      InstanceType: t2.micro
-      SecurityGroups:
-        - !Ref SGEC2
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
+      AllocatedStorage: !Ref StorageDB
+      DBInstanceClass: db.t2.micro
+      Engine: mysql
+      EngineVersion: "5.7"
+      MasterUsername: !Ref USERNAME
+      MasterUserPassword: !Ref PASSWORD
+      DBName: !Ref DBNAME
+      MultiAZ: !Ref DBMAZ
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
 
-          #Versione Wordpress
-          WORDPRESS_VERSION=!Ref WPV
-
-          # Aggiorna i repository e il sistema
-          apt update -y
-
-          # Installa il pacchetto needrestart
-          sudo apt install needrestart
-
-          # Modifica il file di configurazione di needrestart per eseguire il riavvio automatico del kernel (-1 per 'a')
-          sed -i "s/#\$nrconf{kernelhints} = -1;/\$nrconf{kernelhints} = -1;/g" /etc/needrestart/needrestart.conf
-
-          # Configura needrestart per eseguire il riavvio automatico dei servizi invece che chiedere all'utente ('i' per 'a')
-          sed -i "/#\$nrconf{restart} = 'i';/s/.*/\$nrconf{restart} = 'a';/" /etc/needrestart/needrestart.conf
-
-          # Installa i pacchetti necessari per Apache, PHP, MySQL e altri componenti
-          apt install -y apache2 \
-                        ghostscript \
-                        libapache2-mod-php \
-                        mysql-server \
-                        php \
-                        php-bcmath \
-                        php-curl \
-                        php-imagick \
-                        php-intl \
-                        php-json \
-                        php-mbstring \
-                        php-mysql \
-                        php-xml \
-                        php-zip
-
-          # Crea una directory per il sito web
-          mkdir -p /srv/www
-
-          # Imposta i permessi sulla directory del sito web per l'utente Apache, www-data
-          chown www-data: /srv/www
-
-          # Scarica e estrai l'ultima versione di WordPress nella directory del sito web
-          curl -O https://wordpress.org/wordpress-$WORDPRESS_VERSION.tar.gz
-          tar -zxvf wordpress-$WORDPRESS_VERSION.tar.gz -C /srv/www
-          
-          # Crea un file di configurazione Apache per il sito WordPress
-          cat << EOF > /etc/apache2/sites-available/wordpress.conf
-          <VirtualHost *:80>
-             DocumentRoot /srv/www/wordpress
-             <Directory /srv/www/wordpress>
-                  Options FollowSymLinks
-                  AllowOverride Limit Options FileInfo
-                 DirectoryIndex index.php
-                  Require all granted
-             </Directory>
-             <Directory /srv/www/wordpress/wp-content>
-                  Options FollowSymLinks
-                  Require all granted
-             </Directory>
-          </VirtualHost>
-          EOF
-
-          # Abilita il sito WordPress
-          a2ensite wordpress
-
-          # Abilita il modulo di rewrite di Apache
-          a2enmod rewrite
-
-          # Disabilita il sito predefinito di Apache (000-default)
-          a2dissite 000-default
-
-          # Ricarica il servizio Apache per applicare le modifiche di configurazione
-          sudo service apache2 reload
-
-          # Avvia il servizio MySQL
-          service mysql start
-
-          # Copia il file di configurazione di WordPress
-          sudo -u www-data cp /srv/www/wordpress/wp-config-sample.php /srv/www/wordpress/wp-config.php
-
-          # Configura il file di configurazione di WordPress con le informazioni del database
-          sudo -u www-data sed -i 's/database_name_here/wordpress/' /srv/www/wordpress/wp-config.php
-          sudo -u www-data sed -i 's/username_here/wordpress/' /srv/www/wordpress/wp-config.php
-          sudo -u www-data sed -i 's/password_here/matteomatteo/' /srv/www/wordpress/wp-config.php
-          sudo -u www-data sed -i 's/put your unique phrase here/ciao/' /srv/www/wordpress/wp-config.php
-         
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -431,14 +348,118 @@ Resources:
       MaxSize: 4
       DesiredCapacity: 2
       VPCZoneIdentifier:
-        - !Ref PrvSubnet1
-        - !Ref PrvSubnet2
+        - !Ref PubSubnet1
+        - !Ref PubSubnet2
       TargetGroupARNs:
         - !Ref TargetGroup
+  
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-01dd271720c1ba44f  # AMI ubuntu 22.04
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref SGEC2
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash
 
+              # Versione WordPress
+              WORDPRESS_VERSION=!Ref WPV
 
+              # Aggiorna i repository e il sistema
+              apt update -y
 
+              # Installa il pacchetto needrestart
+              sudo apt install needrestart
 
+              # Modifica il file di configurazione di needrestart per eseguire il riavvio automatico del kernel (-1 per 'a')
+              sed -i "s/#\$nrconf{kernelhints} = -1;/\$nrconf{kernelhints} = -1;/g" /etc/needrestart/needrestart.conf
+
+              # Configura needrestart per eseguire il riavvio automatico dei servizi invece che chiedere all'utente ('i' per 'a')
+              sed -i "/#\$nrconf{restart} = 'i';/s/.*/\$nrconf{restart} = 'a';/" /etc/needrestart/needrestart.conf
+
+              # Installa i pacchetti necessari per Apache, PHP, MySQL e altri componenti
+              apt install -y apache2 \
+                            ghostscript \
+                            libapache2-mod-php \
+                            mysql-server \
+                            php \
+                            php-bcmath \
+                            php-curl \
+                            php-imagick \
+                            php-intl \
+                            php-json \
+                            php-mbstring \
+                            php-mysql \
+                            php-xml \
+                            php-zip
+
+              # Crea una directory per il sito web
+              mkdir -p /srv/www
+
+              # Imposta i permessi sulla directory del sito web per l'utente Apache, www-data
+              chown www-data: /srv/www
+
+              # Scarica e estrai l'ultima versione di WordPress nella directory del sito web
+              curl -O https://wordpress.org/latest.tar.gz
+              tar -zxvf latest.tar.gz -C /srv/www
+              mv /srv/www/wordpress /srv/www/wordpress
+
+              # Crea il file di configurazione wp-config.php
+              sudo -u www-data cp /srv/www/wordpress/wp-config-sample.php /srv/www/wordpress/wp-config.php
+
+              # Configura il file di configurazione wp-config.php con le informazioni del database
+              DB_NAME="${DBNAME}"
+              DB_USER="${USERNAME}"
+              DB_PASSWORD="${PASSWORD}"
+              DB_HOST="${EndPoint}"
+
+              cp /srv/www/wordpress/wp-config-sample.php  /srv/www/wordpress/wp-config.php
+
+              sed -i "s/database_name_here/$DB_NAME/" /srv/www/wordpress/wp-config.php
+              sed -i "s/username_here/$DB_USER/" /srv/www/wordpress/wp-config.php
+              sed -i "s/password_here/$DB_PASSWORD/" /srv/www/wordpress/wp-config.php
+              sed -i "s/localhost/$DB_HOST/" /srv/www/wordpress/wp-config.php
+
+              # Crea un file di configurazione Apache per il sito WordPress
+              cat << EOF > /etc/apache2/sites-available/wordpress.conf
+              <VirtualHost *:80>
+                DocumentRoot /srv/www/wordpress
+                <Directory /srv/www/wordpress>
+                  Options FollowSymLinks
+                  AllowOverride All
+                  DirectoryIndex index.php
+                  Require all granted
+                </Directory>
+              </VirtualHost>
+              EOF
+
+              # Abilita il sito WordPress
+              a2ensite wordpress
+
+              # Abilita il modulo di rewrite di Apache
+              a2enmod rewrite
+
+              # Disabilita il sito predefinito di Apache (000-default)
+              a2dissite 000-default
+
+              # Ricarica il servizio Apache per applicare le modifiche di configurazione
+              sudo service apache2 reload
+
+              # Avvia il servizio MySQL
+              service mysql start
+
+              # Riavvia Apache per applicare le modifiche
+              service apache2 restart
+            - {
+                EndPoint: !GetAtt RDSInstance.Endpoint.Address
+              }
+
+              
+            
   CloudFrontDistribution:
     Type: 'AWS::CloudFront::Distribution'
     Properties:
@@ -475,4 +496,8 @@ Resources:
             OriginReadTimeout: 60
         PriceClass: !Ref PriceClassCloudFront
         HttpVersion: http2and3
+        
+
+
+
 
