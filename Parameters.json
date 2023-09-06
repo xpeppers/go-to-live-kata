@@ -20,6 +20,14 @@
     "ParameterValue": "10.0.2.0/24"
   },
   {
+    "ParameterKey": "NumeroMinEC2",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "NumeroMaxEC2",
+    "ParameterValue": "4"
+  },
+  {
     "ParameterKey": "WPV",
     "ParameterValue": "latest"
   },

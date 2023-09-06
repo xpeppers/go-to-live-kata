@@ -28,6 +28,16 @@ Parameters:
     Description: CIDR for the PubSubnet2
     Type: String
     Default: 10.0.2.0/24
+#NumeroMinEC2
+  NumeroMinEC2:
+    Description: minimum number of instances
+    Type: Number
+    Default: 2
+#NumeroMaxEC2
+  NumeroMaxEC2:
+    Description: Maximum number of instances 
+    Type: Number
+    Default: 4
 #Wordpress version
   WPV:
     Description: Wordpress version
@@ -325,8 +335,8 @@ Resources:
     Properties:
       AutoScalingGroupName: "AutoScalingGroup"
       LaunchConfigurationName: !Ref LaunchConfig
-      MinSize: 2
-      MaxSize: 4
+      MinSize: !Ref NumeroMinEC2
+      MaxSize: !Ref NumeroMaxEC2
       DesiredCapacity: 2
       VPCZoneIdentifier:
         - !Ref PubSubnet1
@@ -477,7 +487,9 @@ Resources:
             OriginReadTimeout: 60
         PriceClass: !Ref PriceClassCloudFront
         HttpVersion: http2and3
-        
+
+    
+    
 
 
 
