@@ -1,0 +1,58 @@
+[
+  {
+    "ParameterKey": "VPCCIDR",
+    "ParameterValue": "10.0.0.0/16"
+  },
+  {
+    "ParameterKey": "PrvSubnet1CIDR",
+    "ParameterValue": "10.0.3.0/24"
+  },
+  {
+    "ParameterKey": "PrvSubnet2CIDR",
+    "ParameterValue": "10.0.4.0/24"
+  },
+  {
+    "ParameterKey": "PubSubnet1CIDR",
+    "ParameterValue": "10.0.1.0/24"
+  },
+  {
+    "ParameterKey": "PubSubnet2CIDR",
+    "ParameterValue": "10.0.2.0/24"
+  },
+  {
+    "ParameterKey": "NumeroMinEC2",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "NumeroMaxEC2",
+    "ParameterValue": "4"
+  },
+  {
+    "ParameterKey": "WPV",
+    "ParameterValue": "latest"
+  },
+  {
+    "ParameterKey": "DBMAZ",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "StorageDB",
+    "ParameterValue": "5"
+  },
+  {
+    "ParameterKey": "DBNAME",
+    "ParameterValue": "wordpress"
+  },
+  {
+    "ParameterKey": "USERNAME",
+    "ParameterValue": "username"
+  },
+  {
+    "ParameterKey": "PASSWORD",
+    "ParameterValue": "password123"
+  },
+  {
+    "ParameterKey": "PriceClassCloudFront",
+    "ParameterValue": "PriceClass_200"
+  }
+]

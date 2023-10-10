@@ -1,0 +1,496 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: High Availability Architecture "go-to-live-kata"
+
+Parameters:
+#CIDR
+##VPC
+  VPCCIDR:
+    Description: CIDR for the VPC
+    Type: String
+    Default: 10.0.0.0/16
+##PrvSubnet1
+  PrvSubnet1CIDR:
+    Description: CIDR for the PrvSubnet1
+    Type: String
+    Default: 10.0.3.0/24
+##PrvSubnet2
+  PrvSubnet2CIDR:
+    Description: CIDR for the PrvSubnet2
+    Type: String
+    Default: 10.0.4.0/24
+##PubSubnet1
+  PubSubnet1CIDR:
+    Description: CIDR for the PubSubnet1
+    Type: String
+    Default: 10.0.1.0/24
+##PubSubnet2
+  PubSubnet2CIDR:
+    Description: CIDR for the PubSubnet2
+    Type: String
+    Default: 10.0.2.0/24
+#NumeroMinEC2
+  NumeroMinEC2:
+    Description: minimum number of instances
+    Type: Number
+    Default: 2
+#NumeroMaxEC2
+  NumeroMaxEC2:
+    Description: Maximum number of instances 
+    Type: Number
+    Default: 4
+#Wordpress version
+  WPV:
+    Description: Wordpress version
+    Type: String
+    Default: latest
+    AllowedValues: [5.4,5.5,5.6,5.7,5.8,6.1,6.2,latest]
+
+#DB
+##MultiAZ
+  DBMAZ:
+    Description: Boolean parameter to enable Multi-AZ for the database
+    Type: String
+    #Di default lo disabilito perchè ha un costo maggiore
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+##Storage DB
+  StorageDB:
+    Type: Number
+    #di default setto 5GB (il minimo)
+    Default: 5
+    Description: DB Storage (GB)
+##DB NAME
+  DBNAME:
+    Type: String
+    Default: wordpress
+    Description: wordpress (default --> wordpress)
+##USERNAME
+  USERNAME:
+    Type: String
+    Default: wordpress
+    Description: Username for wordpress (default --> wordpress)
+##PASSWORD
+  PASSWORD:
+    Type: String
+    Default: password123
+    Description: Password for wordpress (default --> password123) , the default password is not recommended
+    NoEcho: true
+
+
+#CloudFront
+##Price Class  
+## N.B ogni classe ha un costo diverso:
+### "PriceClass_All" (La classe di prezzo più costosa che include tutte le edge location di CloudFront in tutto il mondo).
+### "PriceClass_100" (Include le edge location più comuni e offre buone prestazioni globali a un costo inferiore rispetto a PriceClass_All).
+### "PriceClass_200" (Include un sottoinsieme di edge location rispetto a PriceClass_100, ottimo per distribuzioni regionali o limitate).
+  PriceClassCloudFront:
+    Description: CloudFront Price Class
+    Type: String
+    Default: 'PriceClass_200'
+    AllowedValues: ['PriceClass_All','PriceClass_100','PriceClass_200']
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: "VPC"
+
+  PubSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PubSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value: "PubSubnet1"
+
+  PubSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PubSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value: "PubSubnet2"
+
+  PrvSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrvSubnet1CIDR
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value: "PrvSubnet1"
+
+  PrvSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrvSubnet2CIDR
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: Name
+          Value: "PrvSubnet2"
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # NAT
+
+  EIPNAT1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NAT1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPNAT1.AllocationId
+      SubnetId: !Ref PubSubnet1
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: "PublicRouteTable"
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: "PrivateRouteTable1"
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: "PrivateRouteTable2"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NAT1      
+
+  # associate the route table with the subnet
+
+  PubSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PubSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrvSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrvSubnet1
+      RouteTableId: !Ref PrivateRouteTable1
+
+  PrvSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrvSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  SGEC2:  # SecurityGroup
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "SGEC2"
+      GroupDescription: "Security group for EC2"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80 #HTTP
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22 #SSH
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443 #HTTPS
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "LoadBalancer"
+      Subnets:
+        - !Ref PubSubnet1
+        - !Ref PubSubnet2
+      SecurityGroups:
+        - !Ref SGEC2
+
+  ListenerLB:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: "200"
+            ContentType: text/plain
+            MessageBody: "RICHIESTA SU PORTA 80"
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: "TargetGroup"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: instance
+      VpcId: !Ref VPC
+  
+  #RDS    
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: RDSSecurityGroup
+      GroupDescription: Security group for RDS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref SGEC2
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS
+      SubnetIds:
+        - !Ref PrvSubnet1
+        - !Ref PrvSubnet2
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref StorageDB
+      DBInstanceClass: db.t2.micro
+      Engine: mysql
+      EngineVersion: "5.7"
+      MasterUsername: !Ref USERNAME
+      MasterUserPassword: !Ref PASSWORD
+      DBName: !Ref DBNAME
+      MultiAZ: !Ref DBMAZ
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: "AutoScalingGroup"
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: !Ref NumeroMinEC2
+      MaxSize: !Ref NumeroMaxEC2
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PubSubnet1
+        - !Ref PubSubnet2
+      TargetGroupARNs:
+        - !Ref TargetGroup
+  
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-01dd271720c1ba44f  # AMI ubuntu 22.04
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref SGEC2
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash
+
+              # Versione WordPress
+              WORDPRESS_VERSION=!Ref WPV
+
+              # Aggiorna i repository e il sistema
+              apt update -y
+
+              # Installa il pacchetto needrestart
+              sudo apt install needrestart
+
+              # Modifica il file di configurazione di needrestart per eseguire il riavvio automatico del kernel (-1 per 'a')
+              sed -i "s/#\$nrconf{kernelhints} = -1;/\$nrconf{kernelhints} = -1;/g" /etc/needrestart/needrestart.conf
+
+              # Configura needrestart per eseguire il riavvio automatico dei servizi invece che chiedere all'utente ('i' per 'a')
+              sed -i "/#\$nrconf{restart} = 'i';/s/.*/\$nrconf{restart} = 'a';/" /etc/needrestart/needrestart.conf
+
+              # Installa i pacchetti necessari per Apache, PHP, MySQL e altri componenti
+              apt install -y apache2 \
+                            ghostscript \
+                            libapache2-mod-php \
+                            mysql-server \
+                            php \
+                            php-bcmath \
+                            php-curl \
+                            php-imagick \
+                            php-intl \
+                            php-json \
+                            php-mbstring \
+                            php-mysql \
+                            php-xml \
+                            php-zip
+
+              # Crea una directory per il sito web
+              mkdir -p /srv/www
+
+              # Imposta i permessi sulla directory del sito web per l'utente Apache, www-data
+              chown www-data: /srv/www
+
+              # Scarica e estrai l'ultima versione di WordPress nella directory del sito web
+              curl -O https://wordpress.org/latest.tar.gz
+              tar -zxvf latest.tar.gz -C /srv/www
+              mv /srv/www/wordpress /srv/www/wordpress
+
+              # Crea il file di configurazione wp-config.php
+              sudo -u www-data cp /srv/www/wordpress/wp-config-sample.php /srv/www/wordpress/wp-config.php
+
+              # Configura il file di configurazione wp-config.php con le informazioni del database
+              DB_NAME="${DBNAME}"
+              DB_USER="${USERNAME}"
+              DB_PASSWORD="${PASSWORD}"
+              DB_HOST="${EndPoint}"
+
+              cp /srv/www/wordpress/wp-config-sample.php  /srv/www/wordpress/wp-config.php
+
+              sed -i "s/database_name_here/$DB_NAME/" /srv/www/wordpress/wp-config.php
+              sed -i "s/username_here/$DB_USER/" /srv/www/wordpress/wp-config.php
+              sed -i "s/password_here/$DB_PASSWORD/" /srv/www/wordpress/wp-config.php
+              sed -i "s/localhost/$DB_HOST/" /srv/www/wordpress/wp-config.php
+
+              # Crea un file di configurazione Apache per il sito WordPress
+              cat << EOF > /etc/apache2/sites-available/wordpress.conf
+              <VirtualHost *:80>
+                DocumentRoot /srv/www/wordpress
+                <Directory /srv/www/wordpress>
+                  Options FollowSymLinks
+                  AllowOverride All
+                  DirectoryIndex index.php
+                  Require all granted
+                </Directory>
+              </VirtualHost>
+              EOF
+
+              # Abilita il sito WordPress
+              a2ensite wordpress
+
+              # Abilita il modulo di rewrite di Apache
+              a2enmod rewrite
+
+              # Disabilita il sito predefinito di Apache (000-default)
+              a2dissite 000-default
+
+              # Ricarica il servizio Apache per applicare le modifiche di configurazione
+              sudo service apache2 reload
+
+              # Avvia il servizio MySQL
+              service mysql start
+
+              # Riavvia Apache per applicare le modifiche
+              service apache2 restart
+            - {
+                EndPoint: !GetAtt RDSInstance.Endpoint.Address
+              }
+
+              
+            
+  CloudFrontDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          AllowedMethods:
+          - DELETE
+          - GET
+          - HEAD
+          - OPTIONS
+          - PATCH
+          - POST
+          - PUT
+          DefaultTTL: 0
+          MaxTTL: 0
+          MinTTL: 0
+          ForwardedValues:
+            QueryString: true
+            Headers:
+            - '*'
+            Cookies:
+              Forward: all
+          TargetOriginId: LB
+          ViewerProtocolPolicy: 'redirect-to-https'
+          Compress: true
+        Enabled: true
+        IPV6Enabled: true
+        Origins:
+        - DomainName: !GetAtt 'LoadBalancer.DNSName'
+          Id: LB
+          CustomOriginConfig:
+            HTTPSPort: 443
+            OriginProtocolPolicy: 'https-only'
+            OriginReadTimeout: 60
+        PriceClass: !Ref PriceClassCloudFront
+        HttpVersion: http2and3
+
+    
+    
+
+
+
+
